@@ -51,6 +51,7 @@ func main() {
 }
 
 func receiveUpload(c *gin.Context) {
+	log.Println("Received request to upload one file from", c.Request.RemoteAddr)
 	err := c.Request.ParseMultipartForm(32 << 20)
 	if err != nil {
 		log.Println(err)
@@ -77,7 +78,7 @@ func receiveUpload(c *gin.Context) {
 
 // receiveUpload is the handler for POST requests to "/upload"
 func receiveUploadN(c *gin.Context) {
-	fmt.Println("Received upload request!")
+	log.Println("Received request to upload multiple files from", c.Request.RemoteAddr)
 	form, err := c.MultipartForm()
 	if err != nil {
 		log.Println(err)
