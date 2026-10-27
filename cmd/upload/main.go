@@ -14,9 +14,10 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
-const uploadURL = "http://localhost:8083/upload"
+var uploadURL = "http://localhost:8083/upload"
 
-var https = flag.Bool("https", false, "enable HTTPS mode")
+var https = flag.Bool("https", false, "Connect via HTTPS.")
+var help = flag.Bool("h", false, "Print this help message and exit.")
 
 func printHelp() {
 	fmt.Println("Plume client reference implementation\n" +
@@ -29,56 +30,22 @@ func printHelp() {
 
 func main() {
 	flag.Usage = printHelp
-	if len(os.Args) < 2 || os.Args[1] == "-h" || os.Args[1] == "--help" {
+	flag.Parse()
+	filenames := flag.Args()
+	if len(filenames) == 0 || *help == true {
 		printHelp()
 		os.Exit(0)
 	}
 
-	uri := uploadURL
-	if *https {
-		uri = "https://" + strings.TrimPrefix(uploadURL, "http://")
+	if *https == true {
+		uploadURL = "https://" + strings.TrimPrefix(uploadURL, "http://")
 	}
 
-	for _, arg := range os.Args[1:] {
-		var b bytes.Buffer
-		mpWriter := multipart.NewWriter(&b)
-		file := Open(arg)
-		filename := filepath.Base(file.Name())
-		fw, err := mpWriter.CreateFormFile("file", filename)
-		if err != nil {
-			_ = mpWriter.Close()
-			closeFile(file)
-			log.Fatal(err)
-		}
-
-		n, err := io.Copy(fw, file)
-		if err != nil {
-			_ = mpWriter.Close()
-			closeFile(file)
-			log.Fatal(err)
-		}
-		fmt.Printf("Wrote %d bytes from %s\n", n, filename)
-		closeFile(file)
-		closeWriter(mpWriter)
-		req, err := http.NewRequest("POST", uri, &b)
-		if err != nil {
-			log.Fatal(err)
-		}
-		req.Header.Add("Content-Type", mpWriter.FormDataContentType())
-		client := http.DefaultClient
-		resp, err := client.Do(req)
-		if err != nil {
-			fmt.Println("Error occurred:")
-			log.Fatal(err)
-		}
-		fmt.Printf("%d: %s\n", resp.StatusCode, resp.Status)
-		if resp.StatusCode != 200 {
-			Close(resp.Body)
-			log.Fatalf("Status code was not 200, but %d\n", resp.StatusCode)
-		}
-		Close(resp.Body)
+	if len(filenames) == 1 {
+		uploadOne(filenames[0])
+		os.Exit(0)
 	}
-
+	uploadMultiple(filenames)
 }
 
 func closeWriter(w *multipart.Writer) {
@@ -105,4 +72,88 @@ func Open(filename string) *os.File {
 		log.Fatal(err)
 	}
 	return file
+}
+
+func uploadOne(inputFilename string) {
+	var b bytes.Buffer
+	mpWriter := multipart.NewWriter(&b)
+	file := Open(inputFilename)
+	filename := filepath.Base(file.Name())
+	fw, err := mpWriter.CreateFormFile("file", filename)
+	if err != nil {
+		_ = mpWriter.Close()
+		closeFile(file)
+		log.Fatal(err)
+	}
+
+	n, err := io.Copy(fw, file)
+	if err != nil {
+		_ = mpWriter.Close()
+		closeFile(file)
+		log.Fatal(err)
+	}
+	fmt.Printf("Wrote %d bytes from %s\n", n, filename)
+	closeFile(file)
+	closeWriter(mpWriter)
+	req, err := http.NewRequest("POST", uploadURL, &b)
+	if err != nil {
+		log.Fatal(err)
+	}
+	req.Header.Add("Content-Type", mpWriter.FormDataContentType())
+	client := http.DefaultClient
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error occurred:")
+		log.Fatal(err)
+	}
+	fmt.Printf("%d: %s\n", resp.StatusCode, resp.Status)
+	if resp.StatusCode != 200 {
+		Close(resp.Body)
+		log.Fatalf("Status code was not 200, but %d\n", resp.StatusCode)
+	}
+	Close(resp.Body)
+}
+
+func uploadMultiple(filenames []string) {
+	uploadURL += "_multiple"
+
+	var b bytes.Buffer
+	mpWriter := multipart.NewWriter(&b)
+	for _, input := range filenames {
+		file := Open(input)
+		filename := filepath.Base(file.Name())
+		fw, err := mpWriter.CreateFormFile("files", filename)
+		if err != nil {
+			_ = mpWriter.Close()
+			closeFile(file)
+			log.Fatal(err)
+		}
+
+		n, err := io.Copy(fw, file)
+		if err != nil {
+			_ = mpWriter.Close()
+			closeFile(file)
+			log.Fatal(err)
+		}
+		fmt.Printf("Wrote %d bytes from %s\n", n, filename)
+		closeFile(file)
+	}
+	closeWriter(mpWriter)
+	req, err := http.NewRequest("POST", uploadURL, &b)
+	if err != nil {
+		log.Fatal(err)
+	}
+	req.Header.Add("Content-Type", mpWriter.FormDataContentType())
+	client := http.DefaultClient
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error occurred:")
+		log.Fatal(err)
+	}
+	fmt.Printf("%d: %s\n", resp.StatusCode, resp.Status)
+	if resp.StatusCode != 200 {
+		Close(resp.Body)
+		log.Fatalf("Status code was not 200, but %d\n", resp.StatusCode)
+	}
+	Close(resp.Body)
 }
