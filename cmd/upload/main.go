@@ -16,8 +16,8 @@ import (
 
 var uploadURL = "http://localhost:8083/upload"
 
-var https = flag.Bool("https", false, "Connect via HTTPS.")
-var help = flag.Bool("h", false, "Print this help message and exit.")
+var https = flag.BoolP("https", "s", false, "Connect via HTTPS.")
+var help = flag.BoolP("help", "h", false, "Print this help message and exit.")
 
 func printHelp() {
 	fmt.Println("Plume client reference implementation\n" +
