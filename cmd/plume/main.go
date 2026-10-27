@@ -12,27 +12,16 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
-func getExecDir() string {
-	exe, err := os.Executable()
-	if err != nil {
-		log.Fatal(err)
-	}
-	exePath := filepath.Dir(exe)
-	return exePath
-}
-
 const uploadURL = "localhost:8083"
-
 const PlumeDirName = "Plume Uploads"
-
-var PlumeDir = filepath.Join(getExecDir(), PlumeDirName)
-
 const certFileName = "localhost.pem"
 const keyFileName = "localhost-key.pem"
 const certEnvVar = "PLUME_CERT_DIR"
 
 var certDir = os.Getenv(certEnvVar)
+var PlumeDir = filepath.Join(getExecDir(), PlumeDirName)
 
+// Command-line arguments
 var https = flag.Bool("https", false, "enable HTTPS mode")
 
 func main() {
@@ -75,7 +64,7 @@ func receiveUpload(c *gin.Context) {
 		return
 	}
 	filename := sanitiseFilename(file.Filename)
-	filename = generateUniqueFilename(filename)
+	filename = generateUniqueFilename(PlumeDir, filename)
 	out := filepath.Join(PlumeDir, filename)
 	err = c.SaveUploadedFile(file, out)
 	if err != nil {
@@ -99,8 +88,9 @@ func receiveUploadN(c *gin.Context) {
 	successful := make([]string, len(files))
 	for _, file := range files {
 		filename := sanitiseFilename(file.Filename)
-		filename = generateUniqueFilename(filename)
-		err = c.SaveUploadedFile(file, filename)
+		filename = generateUniqueFilename(PlumeDir, filename)
+		out := filepath.Join(PlumeDir, filename)
+		err = c.SaveUploadedFile(file, out)
 		if err != nil {
 			log.Println(err)
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -136,14 +126,23 @@ func splitExt(filename string) (stem string, ext string) {
 
 // generateUniqueFilename appends the filename with a (<number>) if a file with
 // the given name already exists in PlumeDir.
-func generateUniqueFilename(filename string) string {
+func generateUniqueFilename(dir string, filename string) string {
 	counter := 1
 	newFilename := filename
 	stem, ext := splitExt(filename)
-	_, err := os.Stat(filepath.Join(PlumeDir, filename))
+	_, err := os.Stat(filepath.Join(dir, filename))
 	for err == nil {
 		newFilename = fmt.Sprintf("%s (%d)%s", stem, counter, ext)
-		_, err = os.Stat(filepath.Join(PlumeDir, newFilename))
+		_, err = os.Stat(filepath.Join(dir, newFilename))
 	}
 	return newFilename
+}
+
+func getExecDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		log.Fatal(err)
+	}
+	exePath := filepath.Dir(exe)
+	return exePath
 }
