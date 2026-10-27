@@ -22,9 +22,27 @@ var certDir = os.Getenv(certEnvVar)
 var PlumeDir = filepath.Join(getExecDir(), PlumeDirName)
 
 // Command-line arguments
-var https = flag.Bool("https", false, "enable HTTPS mode")
+var https = flag.BoolP("https", "s", false, "enable HTTPS mode")
+var help = flag.BoolP("help", "h", false, "Print this help message and exit.")
+
+func printHelp() {
+	fmt.Println("Plume file upload server\n" +
+		"Usage:\n" +
+		"\033[96mplume\033[0m [OPTIONS]\n" +
+		"    Start the server.\n\n" +
+		"OPTIONS:")
+	flag.PrintDefaults()
+}
 
 func main() {
+	flag.Usage = printHelp
+	flag.Parse()
+
+	if *help {
+		printHelp()
+		os.Exit(0)
+	}
+
 	var err error
 	err = os.MkdirAll(PlumeDir, 0777)
 	if err != nil {
