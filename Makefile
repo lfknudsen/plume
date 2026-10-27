@@ -1,7 +1,7 @@
 ﻿all: server client
 
 server:
-	go build -C cmd/plume; cd cmd/plume; install
+	go build -C cmd/plume -o ../..; install
 
 client:
-	go build -C cmd/upload; cd cmd/upload; install
+	go build -C cmd/upload -o ../..; install
