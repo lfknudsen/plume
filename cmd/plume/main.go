@@ -134,6 +134,7 @@ func generateUniqueFilename(dir string, filename string) string {
 	for err == nil {
 		newFilename = fmt.Sprintf("%s (%d)%s", stem, counter, ext)
 		_, err = os.Stat(filepath.Join(dir, newFilename))
+		counter++
 	}
 	return newFilename
 }
