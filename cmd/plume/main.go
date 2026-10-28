@@ -9,21 +9,20 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pelletier/go-toml/v2"
 	flag "github.com/spf13/pflag"
 )
 
-const uploadURL = "localhost:8083"
 const PlumeDirName = "Plume Uploads"
-const certFileName = "localhost.pem"
-const keyFileName = "localhost-key.pem"
-const certEnvVar = "PLUME_CERT_DIR"
 
-var certDir = os.Getenv(certEnvVar)
+var configFile = ".plume.toml"
+
 var PlumeDir = filepath.Join(getExecDir(), PlumeDirName)
 
 // Command-line arguments
 var https = flag.BoolP("https", "s", false, "enable HTTPS mode")
 var help = flag.BoolP("help", "h", false, "Print this help message and exit.")
+var configPath = flag.StringP("config", "c", filepath.Join(getExecDir(), configFile), "Set path to the configuration file.")
 
 func printHelp() {
 	fmt.Println("Plume file upload server\n" +
@@ -32,6 +31,50 @@ func printHelp() {
 		"    Start the server.\n\n" +
 		"OPTIONS:")
 	flag.PrintDefaults()
+}
+
+// Config contains the key-value pairs found in the configuration file.
+var config struct {
+	CertDir      string `toml:"cert_dir"`
+	CertFilename string `toml:"cert_filename"`
+	KeyFilename  string `toml:"key_filename"`
+	Host         string `toml:"host"`
+	Port         string `toml:"port"`
+}
+
+func addr() string {
+	return fmt.Sprintf("%s:%s", config.Host, config.Port)
+}
+
+func readConfigFile(filename string) error {
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
+	defer Close(file)
+	if err == nil { // If it didn't already exist, we create it with default settings
+		log.Printf("No config file found. Creating at %s.\n", filename)
+		return toml.NewEncoder(file).Encode(config)
+	}
+	file, err = os.OpenFile(filename, os.O_RDONLY, 0666)
+	defer Close(file)
+	if err != nil {
+		return err
+	}
+	return toml.NewDecoder(file).Decode(&config)
+}
+
+func initialiseConfig() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		config.CertDir, err = os.Executable()
+		if err != nil {
+			config.CertDir = "."
+		}
+	} else {
+		config.CertDir = home
+	}
+	config.Host = "localhost"
+	config.Port = "8083"
+	config.CertFilename = config.Host + ".pem"
+	config.KeyFilename = config.Host + "-key.pem"
 }
 
 func main() {
@@ -43,25 +86,28 @@ func main() {
 		os.Exit(0)
 	}
 
-	var err error
-	err = os.MkdirAll(PlumeDir, 0777)
+	initialiseConfig()
+	err := readConfigFile(*configPath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if *https && certDir == "" {
-		log.Fatal("PLUME_CERT_DIR environment variable not set")
+
+	err = os.MkdirAll(PlumeDir, 0777)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	engine := gin.Default()
 	engine.MaxMultipartMemory = 8 << 20 // 8 MiB
 	engine.POST("/upload_multiple", receiveUploadN)
 	engine.POST("/upload", receiveUpload)
+
 	if *https {
-		certFile := filepath.Join(certDir, certFileName)
-		keyFile := filepath.Join(certDir, keyFileName)
-		err = engine.RunTLS(uploadURL, certFile, keyFile)
+		certFile := filepath.Join(config.CertDir, config.CertFilename)
+		keyFile := filepath.Join(config.CertDir, config.KeyFilename)
+		err = engine.RunTLS(addr(), certFile, keyFile)
 	} else {
-		err = engine.Run(uploadURL)
+		err = engine.Run(addr())
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -165,4 +211,10 @@ func getExecDir() string {
 	}
 	exePath := filepath.Dir(exe)
 	return exePath
+}
+
+func Close(f *os.File) {
+	if f != nil {
+		_ = f.Close()
+	}
 }
