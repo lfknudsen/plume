@@ -11,13 +11,18 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pelletier/go-toml/v2"
 	flag "github.com/spf13/pflag"
 )
 
-var uploadURL = "http://localhost:8083/upload"
+const defaultURL = "http://localhost:8083/upload"
+const configFileName = ".upload.toml"
 
 var https = flag.BoolP("https", "s", false, "Connect via HTTPS.")
 var help = flag.BoolP("help", "h", false, "Print this help message and exit.")
+var configFile = flag.StringP("config", "c",
+	filepath.Join(getExecDir(), configFileName),
+	"Set path to the configuration file.")
 
 func printHelp() {
 	fmt.Println("Plume client reference implementation\n" +
@@ -26,6 +31,19 @@ func printHelp() {
 		"    Upload files to the server.\n\n" +
 		"OPTIONS:")
 	flag.PrintDefaults()
+}
+
+var config struct {
+	URL string `toml:"url"`
+}
+
+func getExecDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		log.Fatal(err)
+	}
+	exePath := filepath.Dir(exe)
+	return exePath
 }
 
 func main() {
@@ -37,8 +55,17 @@ func main() {
 		os.Exit(0)
 	}
 
+	initialiseConfig()
+	err := readConfigFile(*configFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if *https {
-		uploadURL = "https://" + strings.TrimPrefix(uploadURL, "http://")
+		withoutPrefix, found := strings.CutPrefix(config.URL, "http://")
+		if found {
+			config.URL = "https://" + withoutPrefix
+		}
 	}
 
 	if len(filenames) == 1 {
@@ -46,6 +73,25 @@ func main() {
 		os.Exit(0)
 	}
 	uploadMultiple(filenames)
+}
+
+func initialiseConfig() {
+	config.URL = defaultURL
+}
+
+func readConfigFile(filename string) error {
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
+	defer Close(file)
+	if err == nil { // If it didn't already exist, we create it with default settings
+		log.Printf("No config file found. Creating at %s.\n", filename)
+		return toml.NewEncoder(file).Encode(config)
+	}
+	file, err = os.OpenFile(filename, os.O_RDONLY, 0666)
+	defer Close(file)
+	if err != nil {
+		return err
+	}
+	return toml.NewDecoder(file).Decode(&config)
 }
 
 func closeWriter(w *multipart.Writer) {
@@ -95,7 +141,7 @@ func uploadOne(inputFilename string) {
 	fmt.Printf("Wrote %d bytes from %s\n", n, filename)
 	closeFile(file)
 	closeWriter(mpWriter)
-	req, err := http.NewRequest("POST", uploadURL, &b)
+	req, err := http.NewRequest("POST", config.URL, &b)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -115,7 +161,7 @@ func uploadOne(inputFilename string) {
 }
 
 func uploadMultiple(filenames []string) {
-	uploadURL += "_multiple"
+	config.URL += "_multiple"
 
 	var b bytes.Buffer
 	mpWriter := multipart.NewWriter(&b)
@@ -139,7 +185,7 @@ func uploadMultiple(filenames []string) {
 		closeFile(file)
 	}
 	closeWriter(mpWriter)
-	req, err := http.NewRequest("POST", uploadURL, &b)
+	req, err := http.NewRequest("POST", config.URL, &b)
 	if err != nil {
 		log.Fatal(err)
 	}
