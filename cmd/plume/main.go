@@ -20,9 +20,10 @@ var configFile = ".plume.toml"
 var PlumeDir = filepath.Join(getExecDir(), PlumeDirName)
 
 // Command-line arguments
-var https = flag.BoolP("https", "s", false, "enable HTTPS mode")
+var https = flag.BoolP("https", "s", false, "Connect via HTTPS.")
 var help = flag.BoolP("help", "h", false, "Print this help message and exit.")
-var configPath = flag.StringP("config", "c", filepath.Join(getExecDir(), configFile), "Set path to the configuration file.")
+var configPath = flag.StringP("config", "c", filepath.Join(getExecDir(), configFile),
+	"Set path to the configuration file.")
 
 func printHelp() {
 	fmt.Println("Plume file upload server\n" +

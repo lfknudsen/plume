@@ -32,12 +32,12 @@ func main() {
 	flag.Usage = printHelp
 	flag.Parse()
 	filenames := flag.Args()
-	if len(filenames) == 0 || *help == true {
+	if len(filenames) == 0 || *help {
 		printHelp()
 		os.Exit(0)
 	}
 
-	if *https == true {
+	if *https {
 		uploadURL = "https://" + strings.TrimPrefix(uploadURL, "http://")
 	}
 
